@@ -12,6 +12,7 @@ class EventHandler(object):
 		self.size = size
 		self.grid = [[]]
 		self.max_score = 0
+		self.occupied_tiles = set()
 		if os.path.isfile("2048.p"):
 			self.max_score = pickle.load( open( "2048.p", "rb" ) )
 		self.start_game()
@@ -24,23 +25,22 @@ class EventHandler(object):
 	def get_score(self): #Getters in python?
 		return self.score
 
-	def __generate_coord(self):
-		coord = {}
-		coord["x"] = random.randint(0,self.size - 1) #Assuming X start from the top left and increases as you go right
-		coord["y"] = random.randint(0,self.size - 1) #Assuming Y start from the top left and increases as you go to the bottom
-		return coord
 		
 	def __add_tile(self): #Thoughts: Optimize function by recording vacant spots in a list during collapse? Rand will choose from said list
 		"""Find an empty spot and add new tile"""
+		if len(self.occupied_tiles) ==  (self.size * self.size): #Grid is full
+			return False
+
 		added_coord = False
 		check = 0
-		while not added_coord and check < (self.size * self.size):
-			coord = self.__generate_coord()
-			if self.grid[coord["y"]][coord["x"]] is None: #Checking if tile is empty and adding a choice of 2 or 4
-				self.grid[coord["y"]][coord["x"]] = random.choice([2,4])
+		while not added_coord:
+			coord = (random.randint(0,self.size - 1),random.randint(0,self.size - 1)) 
+			if coord not in self.occupied_tiles:
+				self.grid[coord[0]][coord[1]] = random.choice([2,4])
+				self.occupied_tiles.add(coord) #Add the list to occupied locations
 				added_coord = True
-			check = check + 1
 
+		print self.occupied_tiles
 		return added_coord
 
 
@@ -56,83 +56,146 @@ class EventHandler(object):
 	
 	def move_left(self): 
 		""" Moving numbers to the left extreme of the board """
+		was_action_taken = False
 		for y in range(0,self.size): #Iterating from top to bottom
 			x = 0 # Starting from the left extreme of the board
 			pair_x = None
 			while x < self.size:
 				number_x = self.__find_number_rightwards(y,x)
 				if number_x is None: break
-				pair_x = self.__move_numbers_horizontally(y,x,pair_x,number_x)
-				x = x + 1	
+				result = self.__move_numbers_horizontally(y,x,pair_x,number_x)
+				
+				pair_x = result[0]
+				addition_successful = result[1]
+				moved = result[2]
+				
+				if was_action_taken is False and (addition_successful is True or moved is True):
+					was_action_taken = True
+				if addition_successful is False:
+					x = x + 1	
 
-		return  self.__next_move()
+		if was_action_taken is True: #If no move was made, do not add a tile.		
+			self.__add_tile()
 
 
 	def move_right(self): 
 		""" Moving numbers to the right extreme of the board """
+		was_action_taken = False
 		for y in range(0,self.size): #Iterating from top to bottom
 			x = self.size -1 #Starting from the right extreme of the board
 			pair_x = None
 			while x >= 0:
 				number_x = self.__find_number_leftwards(y,x)
 				if number_x is None: break
-				pair_x = self.__move_numbers_horizontally(y,x,pair_x,number_x)
-				x = x - 1
+				result = self.__move_numbers_horizontally(y,x,pair_x,number_x)
+				
+				pair_x = result[0]
+				addition_successful = result[1]
+				moved = result[2]
+				
+				if was_action_taken is False and (addition_successful is True or moved is True):
+					was_action_taken = True
+				if addition_successful is False:
+					x = x - 1
 		
-		return  self.__next_move()
+		if was_action_taken is True: #If no move was made, do not add a tile.		
+			self.__add_tile()
 	
 	def move_up(self): 
 		""" Moving numbers to the top extreme of the board """
+		was_action_taken = False
 		for x in range(0,self.size): #Iterating from left to right
 			y = 0 #Starting from the top extreme of the board
 			pair_y = None
 			while y < self.size: 
 				number_y = self.__find_number_downwards(y,x)
 				if number_y is None: break
-				pair_y = self.__move_numbers_vertically(y,x,pair_y,number_y)
-				y = y + 1	
+				result = self.__move_numbers_vertically(y,x,pair_y,number_y)
+				
+				pair_y = result[0]
+				addition_successful = result[1]
+				moved = result[2]
+				
+				if was_action_taken is False and (addition_successful is True or moved is True):
+					was_action_taken = True
+				if addition_successful is False:
+					y = y + 1	
 
-		return  self.__next_move()
+		if was_action_taken is True: #If no move was made, do not add a tile.		
+			self.__add_tile()
 	
 	def move_down(self): 
 		""" Moving numbers to the bottom extreme of the board """
+		was_action_taken = False
 		for x in range(0,self.size): #Iterating from left to right
 			y = self.size -1 #Starting from the bottom extreme of the board
 			pair_y = None
 			while y >= 0: 
 				number_y = self.__find_number_upwards(y,x)
 				if number_y is None: break
-				pair_y = self.__move_numbers_vertically(y,x,pair_y,number_y)
-				y = y - 1	
-		
-		return  self.__next_move()
-	
+				result = self.__move_numbers_vertically(y,x,pair_y,number_y)
+				pair_y = result[0]
+				addition_successful = result[1]
+				moved = result[2]
+				
+				if was_action_taken is False and (addition_successful is True or moved is True):
+					was_action_taken = True
+				if addition_successful is False:
+					y = y - 1	
+
+		if was_action_taken is True: #If no move was made, do not add a tile.		
+			self.__add_tile()
 
 	def __move_numbers_horizontally(self,y,x,pair_x,next_number_x): #Maybe merge this number
 		""" Moves numbers and collapses any if needed. Returns a position at which future numbers collapse"""
-		add_successful = False
+		addition_successful = False
 		if pair_x is not None:
-			add_successful = self.__pair_addition(y,pair_x,y,next_number_x)
+			addition_successful = self.__pair_addition(y,pair_x,y,next_number_x)
 			pair_x = None
 
-		if not add_successful:
-			self.__move_number(y,x,y,next_number_x)
+		moved = False
+		if not addition_successful:
+			moved = self.__move_number(y,x,y,next_number_x)
 			pair_x = x
 
-		return pair_x	
+		return (pair_x,	addition_successful,moved)
 
 	def __move_numbers_vertically(self,y,x,pair_y,next_number_y): #Maybe merge this number
 		""" Moves numbers and collapses any if needed. Returns a position at which future numbers collapse"""
-		add_successful = False
+		addition_successful = False
 		if pair_y is not None:
-			add_successful = self.__pair_addition(pair_y,x,next_number_y,x)
+			addition_successful = self.__pair_addition(pair_y,x,next_number_y,x)
 			pair_y = None
 
-		if not add_successful:
-			self.__move_number(y,x,next_number_y,x)
+		moved = False
+		if not addition_successful:
+			moved = self.__move_number(y,x,next_number_y,x)
 			pair_y = y
 
-		return pair_y		
+		return (pair_y,	addition_successful,moved)		
+
+	def __pair_addition(self,addto_y,addto_x, addfrom_y,addfrom_x):
+		"""Check if two elements are equal and add to one if so"""	
+		collapsed = False
+		if self.grid[addto_y][addto_x] == self.grid[addfrom_y][addfrom_x]:
+			self.grid[addto_y][addto_x] = 2 * self.grid[addfrom_y][addfrom_x]	
+			self.score = self.score + self.grid[addto_y][addto_x] 
+			self.grid[addfrom_y][addfrom_x] = None
+			self.occupied_tiles.remove((addfrom_y,addfrom_x)) #Mark as unoccupied
+			collapsed = True
+		return collapsed
+
+	def __move_number(self,moveto_y,moveto_x, movefrom_y,movefrom_x):
+		""" Moving numbers from one position to another, resetting last position to None"""
+		number_moved = False
+		if moveto_x != movefrom_x or moveto_y != movefrom_y: #Check that number is not in the same place
+			self.grid[moveto_y][moveto_x] = self.grid[movefrom_y][movefrom_x]
+			if (moveto_y,moveto_x) not in self.occupied_tiles:
+				self.occupied_tiles.add((moveto_y,moveto_x))
+			self.grid[movefrom_y][movefrom_x] = None
+			self.occupied_tiles.remove((movefrom_y,movefrom_x)) #Mark as unoccupied
+			number_moved = True #A number were moved 
+		return number_moved 
 
 	def __find_number_rightwards(self,  y, x):
 		""" Find the next number to the right  """
@@ -164,57 +227,34 @@ class EventHandler(object):
 			y = y + 1
 		result = y if y < self.size else None
 		return result	
-
-	def __pair_addition(self,addto_y,addto_x, addfrom_y,addfrom_x):
-		"""Check if two elements are equal and add to one if so"""	
-		collapsed = False
-		if self.grid[addto_y][addto_x] == self.grid[addfrom_y][addfrom_x]:
-			self.grid[addto_y][addto_x] = 2 * self.grid[addfrom_y][addfrom_x]	
-			self.score = self.score + self.grid[addto_y][addto_x] 
-			self.grid[addfrom_y][addfrom_x] = None
-			collapsed = True
-		return collapsed
-
-	def __move_number(self,moveto_y,moveto_x, movefrom_y,movefrom_x):
-		""" Moving numbers from one position to another, resetting last position to None"""
-		if moveto_x != movefrom_x or moveto_y != movefrom_y: #Check that number is not in the same place
-			self.grid[moveto_y][moveto_x] = self.grid[movefrom_y][movefrom_x]
-			self.grid[movefrom_y][movefrom_x] = None
 	
-	def __next_move(self):
-		game_over = False
-		if self.__add_tile() is False:
-			print "Could not add more Tiles"
-			return self.__any_pairs_left()
-		return game_over	
 
-	def __any_pairs_left(self):
-		#pudb.set_trace()
-		""" Checking if pairs are available in a full grid"""
-		prev_x = None
-		x = 0
+	def is_game_over(self):
+		""" Checking if number pairs are available in a full grid/ If further moves are possible"""
+		if len(self.occupied_tiles) <  (self.size * self.size): #Grid is full
+			return False
+
 		for y in range(0,self.size):
+			prev_x = None
+			x = 0
 			while x < self.size:
 				if prev_x != None:
 					if self.grid[y][prev_x] == self.grid[y][x]:
-						print "Some items are equal",y,x,y,prev_x
 						return False
 				prev_x = x
 				x = x + 1
 
-		prev_y = None
-		y = 0
 		for x in range(0,self.size):
+			prev_y = None
+			y = 0
 			while y < self.size:
 				if prev_y != None:
 					if self.grid[prev_y][x] == self.grid[y][x]:
-						print "Some items are equal",y,x,prev_y,x
 						return False
 				prev_y = y
 				y = y + 1
 
 		if self.score > self.max_score:
 			self.max_score = self.score
-			#Need to save score
 
 		return True
