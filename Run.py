@@ -5,6 +5,7 @@ from EventHandler import EventHandler
 
 def game_over(handler):
 	print "Game Over!"
+	handler.print_board()
 	score = handler.get_score()
 	print "Your Score is",score
 
@@ -23,6 +24,6 @@ while(response != "q"):
 	elif response == "d":
 		move_result = handler.move_down()
 
-	if move_result is True : 
+	if handler.is_game_over() is True : 
 		game_over(handler)
 		break
