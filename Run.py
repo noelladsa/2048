@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from EventHandler import EventHandler
+from Model import Model
 
 
 def game_over(handler):
@@ -9,7 +9,9 @@ def game_over(handler):
 	score = handler.get_score()
 	print "Your Score is",score
 
-handler = EventHandler()
+handler = Model()
+handler.start_game()
+
 response = None
 while(response != "q"):
 	handler.print_board()
