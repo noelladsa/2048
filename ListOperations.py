@@ -1,76 +1,74 @@
+ADD = 0
+MOVE = 1
+NEW = 2
 
-class ListOps(object): 								# This doesn't really have to be a class with state
-	"""Class that performs all 2048 related operations 
-	    on a list mapping to a row or column"""
-	STATE_ADDITION = 0 										# Using theses like enums
-	STATE_MOVED = 1 										# Using theses like enums
+def collapse_list(num_list, transform):
+    """List can contain numbers interspersed with empty positions.
+    List will shrink such that first occuring pairs
+    are added and the rest occupy spots that have 0"""
+    pos = 0 											# Starting from_pos the left extreme of the board
+    pair_pos = None 									# Stores an x of the start of a pair
+    ops_log = []
+    while pos < len(num_list):
+        filled_pos = _find_next_number(pos, num_list)
+        if filled_pos is None:
+            break
 
-	@staticmethod
-	def collapse_list(number_list):
-		"""List can contain numbers interspersed with empty positions. 
-		List will shrink such that first occuring pairs
-		are added and the rest occupy spots that have 0"""
-		index = 0 											# Starting from the left extreme of the board
-		pair_index = None 									# Stores an index of the start of a pair 
-		ops_log = []
-		while index < len(number_list):
-			filled_index = ListOps._find_next_number(index,number_list) 
-			if filled_index is None: 
-			 	break 			# List contained no more numbers 
-			
-			add_success = False
-			if pair_index is not None: 						# A pair was already started
-				add_success = ListOps._pair_addition(pair_index,filled_index,number_list,ops_log)
-				pair_index = None							# Reset pairs to None, the next number in loop will start a pair
-		
-			if add_success is False:
-				if ListOps._move_number(index,filled_index,number_list,ops_log) is True:
-					ops_log.append((ListOps.STATE_MOVED,filled_index,index,number_list[to_index]))
-				pair_index = index   						# Start a new pair for future additions
-				index = index + 1	
-			else:
-				ops_log.append((ListOps.STATE_ADDITION,filled_index,index,number_list[filled_index],number_list[index]))
+        op_log = None
+        if pair_pos is not None: 						# A pair was already started
+            op_log = _pair_addition(pair_pos, filled_pos, num_list, transform)
+            pair_pos = None
 
-		return ops_log
+        if not op_log:
+            op_log = _move_number(pos, filled_pos, num_list, transform)
+            pair_pos = pos   						# Start a new pair for future additions
+            pos = pos + 1
 
-	@staticmethod	
- 	def _find_next_number(index,number_list):
-		""" Returns the next index where a number is found from  """
-		while index < len(number_list): 					# Stops when you've found a number
-			if number_list[index] > 0: break
-			index = index + 1
-		return index if index < len(number_list) else None
+        if op_log:
+            ops_log.append(op_log)
 
-	@staticmethod	
-	def _pair_addition(to_index, from_index,number_list):
-		"""Check if two elements are equal and add to one if so"""	
-		if number_list[to_index] == number_list[from_index]:
-			number_list[to_index] = 2 * number_list[from_index]	
-			number_list[from_index] = 0
-			return True
-		return False
-
-	@staticmethod	
-	def _move_number(to_index, from_index,number_list):
-		""" Moving numbers from one position to another,
-		 changing previous position to None"""
-		if to_index != from_index: 							#Check that number is not in the same place
-			number_list[to_index] = number_list[from_index]
-			number_list[from_index] = 0
-			return True
-		return False
-
-	@staticmethod	
-	def is_pair_present(number_list):
-		""" Searches for number pairs in the list"""
-		prev_number = None
-		for number in number_list:
-			if prev_number != None:
-				if prev_number == number: return True
-		 	prev_number = number
-		return False
+    return ops_log
 
 
-ops = ListOps()
-num_list,log = ListOps.collapse_list([2,2,None,4])
-print "List After",num_list,log
+def _find_next_number(pos, num_list):
+    """ Returns the next position where a number is found from  """
+    while pos < len(num_list):
+        if num_list[pos] > 0:
+            break
+        pos = pos + 1
+    return pos if pos < len(num_list) else None
+
+
+def _pair_addition(to_pos, from_pos, num_list, transform):
+    """Check if two elements are equal and add to one if so"""
+    if num_list[to_pos] == num_list[from_pos]:
+        num_list[to_pos] = 2 * num_list[from_pos]
+        num_list[from_pos] = 0
+        return {'State': ADD, 'from_pos': abs(transform - from_pos),
+                'to_pos': abs(transform - to_pos), 'to_val': num_list[to_pos]}
+
+
+def _move_number(to_pos, from_pos, num_list, transform):
+    """ Moving numbers from one position to another,
+    changing previous position to None"""
+    if to_pos != from_pos:
+        num_list[to_pos] = num_list[from_pos]
+        num_list[from_pos] = 0
+        return {'State': MOVE, 'from_pos':abs(transform - from_pos),
+                'to_pos': abs(transform - to_pos), 'to_val': num_list[to_pos]}
+
+
+def is_pair_present(num_list):
+    """ Searches for number pairs in the list"""
+    prev_number = None
+    for number in num_list:
+        if prev_number == number:
+            return True
+        prev_number = number
+    return False
+
+if __name__ == "__main__":
+    array = [2, 2, 0, 4]
+    log = collapse_list(array)
+    print "Log", log
+    print "List After", array
