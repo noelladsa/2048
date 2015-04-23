@@ -5,7 +5,7 @@ from Model import Model
 
 def game_over(handler):
 	print "Game Over!"
-	handler.print_board()
+	print handler.get_board_string()
 	score = handler.get_score()
 	print "Your Score is",score
 
@@ -14,7 +14,7 @@ handler.start_game()
 
 response = None
 while(response != "q"):
-	handler.print_board()
+	print handler.get_board_string()
 	response = raw_input("Enter a move: l - left, r - right, u - up, d - down")
 	move_result = False
 	if response == "l":
@@ -26,6 +26,6 @@ while(response != "q"):
 	elif response == "d":
 		move_result = handler.move_down()
 
-	if handler.is_game_over() is True : 
+	if handler.is_game_over() is True :
 		game_over(handler)
 		break
