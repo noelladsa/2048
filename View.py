@@ -3,27 +3,27 @@ from pygame.locals import *
 import os
 import ListOps
 
-WIN_CLR = (250, 248, 239)
-EMPTY_TILE_CLR = (204, 192, 179)
-NUM_TILE_CLR = (238, 228, 218)
-BRAND_CLR = (255, 108, 120)
-BOARD_CLR = (187, 173, 160)
-TILE_FT_CLR = (143, 122, 102)
-BORDER = 20
-DB_HEIGHT = 100
-WIN_WIDTH = 600
-WIN_HEIGHT = 700
+WIN_COL = (250, 248, 239)
+TILE_BCK_CLR = (204, 192, 179)
+NUM_TILE_COL = (238, 228, 218)
+BRND_COL = (255, 108, 120)
+BRD_COL = (187, 173, 160)
+TILE_FT_COL = (143, 122, 102)
+PDNG = 20
+DB_H = 100
+WIN_W = 600
+WIN_H = 700
 FSIZES = [6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 21, 24, 28, 32, 36, 42, 48, 55, 63, 73, 84, 96]
-FONT_CLR = (0, 0, 0)
+FNT_COL = (0, 0, 0)
 
 
-def get_text_surf(text, height, width, font_clr):
+def get_text_surf(text, h, w, font_clr):
     pygame.font.init()
     font = None
     for x in range(len(FSIZES) - 1, 0, -1):
         font = pygame.font.Font(None, FSIZES[x])
         size = font.size(text)
-        if size[0] < width and size[1] < height:
+        if size[0] < w and size[1] < h:
             break
 
     text_surf = font.render(text, 1, font_clr)
@@ -31,122 +31,129 @@ def get_text_surf(text, height, width, font_clr):
 
 
 class TileSprite(pygame.sprite.DirtySprite):
-    """ Tile that handles tile movement"""
+    """ Each Tile on the board is represented as a sprite"""
     ALPHA_DELTA = 25
     MOVE_DELTA = 80
     MOVE = 0
     UPDATE = 1
-    MOVE_OUT = 2
-    FADE_IN = 3
+    POP = 2
+    MOVE_OUT = 3
 
-    def __init__(self, w, h, work_finished):
+    def __init__(self, w, h):
         pygame.sprite.DirtySprite.__init__(self)
         self.w = w
         self.h = h
-        self.image = pygame.Surface([w,h])
-        self.image.fill(NUM_TILE_CLR)
+        self.image = pygame.Surface([w, h])
+        self.image.fill(NUM_TILE_COL)
         self.rect = self.image.get_rect()
         self.image.set_alpha(0)
-        self.working = False
-        self.callback = work_finished
+        self.update_jobs = []
 
-    def set_state(self, state):
-        self.state_data = state
-        self.working = True
-
-
-    def update(self):
-        if not self.working:
-            return
-        new_state = self.state_data["state"]
-        if new_state == self.FADE_IN:
-            self.fade_in_tile()
-        elif new_state == self.MOVE:
-            self.move_tile()
+    def add_jobs(self, action, *args):
+        self.update_jobs.append((action, args))
         self.dirty = 1
 
-    def _get_next_pos(self):
-        cal_diff_x = self.state_data["pos"][0] - self.rect.x
-        cal_diff_y = self.state_data["pos"][1] - self.rect.y
-        delta = self.MOVE_DELTA
-        if cal_diff_x != 0:
-            if  abs(cal_diff_x) - delta < 0:
-                delta =  abs(cal_diff_x)
-            return (cal_diff_x * delta/(abs(cal_diff_x)),0)
-        elif cal_diff_y != 0:
-            if  abs(cal_diff_y) - delta < 0:
-                delta = abs(cal_diff_y)
-            return (0,cal_diff_y * delta/(abs(cal_diff_y)))
+    def has_jobs(self):
+        return len(self.update_jobs)
 
-    def move_tile(self):
-        newpos = self._get_next_pos()
-        if newpos:
-            self.rect = self.rect.move(newpos)
-        else:
-            self.working = False
-            self.callback(self)
+    def update(self):
+        if not self.update_jobs:
+            return
+        self.dirty = 1
+        action,args = self.update_jobs[0]
+        is_complete = False
+        if action == TileSprite.UPDATE:
+            is_complete = self._update_text(args)
+        elif action == TileSprite.POP:
+            is_complete = self._pop_tile(args)
+        elif action == self.MOVE:
+            is_complete = self._move_tile(args)
+        if is_complete:
+            self.update_jobs.pop(0)
 
-    def fade_in_tile(self):
+    def _update_text(self, args):
+        text, = args
+        self.image.fill(NUM_TILE_COL)
+        text_surf = get_text_surf(text, self.h, self.w, TILE_FT_COL)
+        self.image.blit(text_surf, (self.w/3, self.h/4))
+        return True
+
+    def _get_move_delta(self, distance):
+        abs_dist = abs(distance)
+        delta = abs_dist if abs_dist - self.MOVE_DELTA < 0 else self.MOVE_DELTA
+        return distance * delta / abs_dist
+
+    def _move_tile(self, args):
+        topleft_corner, = args
+        diff_x = topleft_corner[0] - self.rect.x
+        diff_y = topleft_corner[1] - self.rect.y
+        if not diff_x and not diff_y:
+            return True
+        delta = (self._get_move_delta(diff_x) if diff_x != 0 else 0,
+                 self._get_move_delta(diff_y) if diff_y != 0 else 0)
+        self.rect = self.rect.move(delta)
+        return False
+
+    def _pop_tile(self, args):
+        topleft_corner, = args
         alpha = self.image.get_alpha()
         if alpha == 255:
-            self.working = False
-            self.callback(self)
-            return
-        if alpha == 0:
-            text_surf = get_text_surf(self.state_data["val"], self.h, self.w,TILE_FT_CLR)
-            self.image.blit(text_surf,(self.w/3,self.h/4))
-            self.rect.x = self.state_data["pos"][0]
-            self.rect.y = self.state_data["pos"][1]
+            return True
+        self.rect.x, self.rect.y = topleft_corner
         alpha = alpha + self.ALPHA_DELTA
         self.image.set_alpha(alpha)
-
+        return False
 
 class View(object):
     """2048 ng Window"""
 
     def __init__(self, size=4):
         """ Initializing colors and start drawing the background"""
-        self.num_per_edge = size
-        self.screen = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
+        self.edge_num = size
+        self.screen = pygame.display.set_mode((WIN_W, WIN_H))
         background = pygame.Surface(self.screen.get_size())
         self.background = background.convert()
-        self.background.fill(WIN_CLR)
+        self.background.fill(WIN_COL)
         self.allsprites = pygame.sprite.LayeredDirty()
         # Maintaining a collection of current tiles
         self.coord_tiles = {}
-        self.working_tiles = {}
-        self.notifications = []
+        self.working_tiles = []
         self._draw_game()
 
     def _draw_game(self):
         pygame.display.set_caption('2048')
-        db_width = (WIN_WIDTH - BORDER * 4)/3
+        db_w = (WIN_W - PDNG * 4)/3
 
 # Drawing the logo
-        self._draw_text_rect("2048", BORDER, BORDER,DB_HEIGHT,db_width,FONT_CLR, BRAND_CLR)
-# Drawing the Score Board
-        self.sc_dimens = ( db_width + 2 * BORDER, BORDER, int(DB_HEIGHT/2), db_width)
+        self._draw_text_rect("2048", PDNG, PDNG, DB_H, db_w, FNT_COL, BRND_COL)
 
-        self._draw_text_rect("SCORE", self.sc_dimens[0], self.sc_dimens[1],self.sc_dimens[2],self.sc_dimens[3], FONT_CLR, BOARD_CLR)
+# Drawing the Score Board
+        self.sc_d = (db_w + 2 * PDNG, PDNG, int(DB_H/2), db_w)
+        self._draw_text_rect("SCORE", self.sc_d[0], self.sc_d[1], self.sc_d[2],
+                             self.sc_d[3], FNT_COL, BRD_COL)
         self.draw_score(0)
+
 # Drawing Max Score Board
-        self.mx_dimens = ( 2 * db_width + 3 * BORDER, BORDER, int(DB_HEIGHT/2), db_width)
-        self._draw_text_rect(" MAX ", self.mx_dimens[0], self.mx_dimens[1],
-                             self.mx_dimens[2],self.mx_dimens[3], FONT_CLR, BOARD_CLR)
+        self.mx_d = (2 * db_w + 3 * PDNG, PDNG, int(DB_H/2), db_w)
+        self._draw_text_rect(" MAX ", self.mx_d[0], self.mx_d[1], self.mx_d[2],
+                             self.mx_d[3], FNT_COL, BRD_COL)
         self.draw_max_score(0)
+
 # Drawing Board
-        self.board_dimens = (BORDER, DB_HEIGHT + 2 * BORDER, WIN_WIDTH - 2 * BORDER,
-                             WIN_HEIGHT - 3 * BORDER - DB_HEIGHT)
-        pygame.draw.rect(self.background, BOARD_CLR, (self.board_dimens[0],self.board_dimens[1],                          self.board_dimens[2],self.board_dimens[3]),0)
+        self.brd_d = (PDNG, DB_H + 2 * PDNG, WIN_W - 2 * PDNG,WIN_H - 3 * PDNG - DB_H)
+        pygame.draw.rect(self.background, BRD_COL, (self.brd_d[0], self.brd_d[1],
+                         self.brd_d[2], self.brd_d[3]), 0)
 # Drawing Tile Size
 
-        self.t_width = (self.board_dimens[2] - BORDER * (self.num_per_edge + 1))/self.num_per_edge
-        self.t_height = (self.board_dimens[3] - BORDER * (self.num_per_edge + 1))/self.num_per_edge
+        self.t_w = (self.brd_d[2] - PDNG * (self.edge_num + 1))/self.edge_num
+        self.t_h = (self.brd_d[3] - PDNG * (self.edge_num + 1))/self.edge_num
 
-        for y in range(self.num_per_edge):
-            for x in range(self.num_per_edge):
+# Drawing Tile Slots
+        for y in range(self.edge_num):
+            for x in range(self.edge_num):
                 self._draw_empty_tile(y, x)
-        self.screen.blit(self.background,(0,0))
+
+        self.screen.blit(self.background, (0, 0))
         pygame.display.flip()
 
     def _draw_text_rect(self, text, x, y, h, w, font_clr, bg_clr):
@@ -155,91 +162,75 @@ class View(object):
         textpos = text_surf.get_rect(centerx=x + w/2, centery=y + h/2)
         self.background.blit(text_surf, textpos)
 
-    def draw_score(self,score):
-        self._draw_text_rect(str(score), self.sc_dimens[0] , self.sc_dimens[1]+ self.sc_dimens[2],self.sc_dimens[2],self.sc_dimens[3], FONT_CLR, BOARD_CLR)
+    def draw_score(self, score):
+        self._draw_text_rect(str(score), self.sc_d[0], self.sc_d[1] + self.sc_d[2],
+                             self.sc_d[2], self.sc_d[3], FNT_COL, BRD_COL)
 
-    def draw_max_score(self,max_score):
-        self._draw_text_rect(str(max_score), self.mx_dimens[0] , self.mx_dimens[1]+ self.mx_dimens[2],
-        self.mx_dimens[2],self.mx_dimens[3], FONT_CLR, BOARD_CLR)
-    def set_controller(self,controller):
+    def draw_max_score(self, max_score):
+        self._draw_text_rect(str(max_score), self.mx_d[0], self.mx_d[1] + self.mx_d[2],
+                             self.mx_d[2], self.mx_d[3], FNT_COL, BRD_COL)
+
+    def set_controller(self, controller):
         self.controller = controller
 
-    def _get_tile_pos(self,x,y):
-        t_x = (x + 2) * BORDER + x * self.t_width
-        t_y = DB_HEIGHT + BORDER + (y + 2) * BORDER + y * self.t_height
-        return t_x,t_y
+    def _get_tile_pos(self, coord):
+        x, y = coord
+        t_x = (x + 2) * PDNG + x * self.t_w
+        t_y = DB_H + PDNG + (y + 2) * PDNG + y * self.t_h
+        return t_x, t_y
 
     def _draw_empty_tile(self, coord_x, coord_y):
-        tile_x, tile_y = self._get_tile_pos(coord_x,coord_y)
-        pygame.draw.rect(self.background, EMPTY_TILE_CLR, (tile_x, tile_y , self.t_width, self.t_height), 0)
+        t_x, t_y = self._get_tile_pos((coord_x, coord_y))
+        pygame.draw.rect(self.background, TILE_BCK_CLR, (t_x, t_y, self.t_w, self.t_h), 0)
+
+
+    def _get_tile_coord(self, axis,axis_index, log_list, pos_name):
+        if pos_name in log_list:
+            return (log_list[pos_name], axis_index) if axis == "y" else \
+                   (axis_index, log_list[pos_name])
 
     def notify(self, data):
-        self.notifications.append(data)
+        axis, logs = data
+        print "Before Axis,logs", axis, logs
+        for axis_index, log in logs.items():
+            for action in log:
+                self._process_action(axis, axis_index, action)
 
-    def _get_tile_coord(self,axis,log_list,index,pos_name):
-        return  (log_list[pos_name],index) if axis == "y" else (index,log_list[pos_name])
-
-    def get_tile_transition(self,data):
-        tile_state = {}
-        if ListOps.NEW == data["state"]:
-            tile_state["state"] = TileSprite.FADE_IN
-        elif ListOps.MOVE == data["state"]:
-            tile_state["state"] = TileSprite.MOVE
-        else:
-            tile_state["state"] = TileSprite.MOVE_OUT
-        return tile_state
-
-    def _sprite_finished_work(self,sprite):
-        self.coord_tiles[self.working_tiles[sprite]] = sprite
-        del self.working_tiles[sprite]
-
-    def _do_prev_move(self):
-        if self.notifications and not self.working_tiles:
-            print "Before Notifications",self.notifications
-            axis,logs = self.notifications[0]
-            print "Before Axis,logs",axis,logs
-            for index,log_list in logs.items():
-                log = log_list.pop(0)
-                tile = None
-                to_pos = self._get_tile_coord(axis,log,index,"x")
-                if log["state"] == ListOps.NEW:
-                    print "NEW TILE"
-                    tile = TileSprite(self.t_width,self.t_height,self._sprite_finished_work)
-                    self.allsprites.add(tile)
-                elif log["state"] == ListOps.MOVE:
-                    print "MOVE TILE"
-                    from_pos = self._get_tile_coord(axis,log,index,"from_x")
-                    print "Retrieving from",from_pos
-                    print "Moving to",to_pos
-                    tile = self.coord_tiles[from_pos]
-                    del self.coord_tiles[from_pos]
-                self.working_tiles[tile] = to_pos
-                tile_state = self.get_tile_transition(log)
-                tile_state["pos"] = self._get_tile_pos(to_pos[0],to_pos[1])
-                tile_state["val"] = str(log["val"])
-                tile.set_state(tile_state)
-                if not log_list:
-                    del logs[index]
-
-            if logs:
-                self.notifications[0] = axis,logs
-            else:
-                self.notifications.pop(0)
-
-        if not self.notifications and not self.working_tiles:
-            return False
-        return True
+    def _process_action(self, axis, axis_index, action):
+        to_coord = self._get_tile_coord(axis, axis_index, action, "x")
+        from_coord = self._get_tile_coord(axis, axis_index, action, "from_x")
+        from_tile = self.coord_tiles[from_coord] if from_coord in self.coord_tiles else None
+        to_tile = self.coord_tiles[to_coord] if to_coord in self.coord_tiles else None
+        val = str(action["val"])
+        print "Log,from_tile,to_tile,to_coord,from_coord",
+        action, from_tile, to_tile, to_coord, from_coord
+        if action["state"] == ListOps.NEW:
+            tile = TileSprite(self.t_w, self.t_h)
+            tile.add_jobs(TileSprite.UPDATE, val)
+            tile.add_jobs(TileSprite.POP, self._get_tile_pos(to_coord))
+            self.allsprites.add(tile)
+            self.coord_tiles[to_coord] = tile
+        elif action["state"] == ListOps.MOVE:
+            from_tile.add_jobs(TileSprite.MOVE, self._get_tile_pos(to_coord))
+            del self.coord_tiles[from_coord]
+            self.coord_tiles[to_coord] = from_tile
+        elif action["state"] == ListOps.ADD:
+            from_tile.add_jobs(TileSprite.MOVE, self._get_tile_pos(to_coord))
+            to_tile.add_jobs(TileSprite.UPDATE,val)
 
     def load_view(self):
         """ Starts the game loop """
         pygame.init()
         run = True
         clock = pygame.time.Clock()
-        self.allsprites.clear(self.screen,self.background)
+        self.allsprites.clear(self.screen, self.background)
         while run:
                 # Display some text
             for event in pygame.event.get():
-                if event.type == KEYDOWN and not self.working_tiles:
+                if any([self.coord_tiles[coord].has_jobs() for coord in self.coord_tiles]):
+                    break;
+
+                if event.type == KEYDOWN:
                     key = pygame.key.get_pressed()
                     if key[pygame.K_LEFT]:
                         self.controller.handle_key_left()
@@ -253,11 +244,10 @@ class View(object):
                 if event.type == pygame.QUIT:
                     run = False
 
-            while self._do_prev_move():
-                self.allsprites.update()
-                rects = self.allsprites.draw(self.screen)
-                pygame.display.update(rects)
-                clock.tick(60)
+            self.allsprites.update()
+            rects = self.allsprites.draw(self.screen)
+            pygame.display.update(rects)
+            clock.tick(60)
 
         self.controller.handle_quit()
         pygame.quit()
