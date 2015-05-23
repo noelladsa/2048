@@ -13,7 +13,6 @@ class Model(object):
     def __init__(self, size=4):
         self.size = size
         # Using numpy for easy array transforms
-        self.grid = np.zeros((size, size), dtype=np.int)
         self._load_score()
         self.listeners = []
 
@@ -27,6 +26,7 @@ class Model(object):
 
     def start_game(self):
         self.score = 0
+        self.grid = np.zeros((self.size, self.size), dtype=np.int)
         self._add_number()
 
     def register_listener(self, listener):
@@ -89,6 +89,8 @@ class Model(object):
                 log_dict[index] = log
         self.send_notification(axis,log_dict)
         self._add_number()
+        if self.is_game_over():
+            raise Exception("Game Over!")
 
     def move_left(self):
         """ Moving numbers to the left extreme of the board """
