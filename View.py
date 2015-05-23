@@ -1,11 +1,12 @@
 import pygame
 from pygame.locals import *
+import random
 import os
 import ListOps
 
 WIN_COL = (250, 248, 239)
 TILE_BCK_CLR = (204, 192, 179)
-NUM_TILE_COL = (238, 228, 218)
+TILE_COL = (238, 228, 218)
 BRND_COL = (255, 108, 120)
 BRD_COL = (187, 173, 160)
 TILE_FT_COL = (143, 122, 102)
@@ -29,25 +30,30 @@ def get_text_surf(text, h, w, font_clr):
     text_surf = font.render(text, 1, font_clr)
     return text_surf
 
+def draw_text_rect( text, surf, x, y, h, w, font_clr, bg_clr):
+    pygame.draw.rect(surf, bg_clr, (x, y, w, h), 0)
+    text_surf = get_text_surf(text, h - PDNG, w - PDNG, font_clr)
+    textpos = text_surf.get_rect(centerx=x + w/2, centery=y + h/2)
+    surf.blit(text_surf, textpos)
+
 
 class TileSprite(pygame.sprite.DirtySprite):
     """ Each Tile on the board is represented as a sprite"""
-    ALPHA_DELTA = 25
-    MOVE_DELTA = 80
+    POP_DELTA = 30
+    MOVE_DELTA = 120
+    ALPHA_DELTA = 5
     MOVE = 0
-    UPDATE = 1
     POP = 2
-    MOVE_OUT = 3
+    KILL = 3
+    ZOOM_UPDATE = 4
 
     def __init__(self, w, h):
         pygame.sprite.DirtySprite.__init__(self)
-        self.w = w
-        self.h = h
+        self.w, self.h =  w, h
         self.image = pygame.Surface([w, h])
-        self.image.fill(NUM_TILE_COL)
         self.rect = self.image.get_rect()
-        self.image.set_alpha(0)
         self.update_jobs = []
+        self.job_state = None
 
     def add_jobs(self, action, *args):
         self.update_jobs.append((action, args))
@@ -62,21 +68,62 @@ class TileSprite(pygame.sprite.DirtySprite):
         self.dirty = 1
         action,args = self.update_jobs[0]
         is_complete = False
-        if action == TileSprite.UPDATE:
-            is_complete = self._update_text(args)
-        elif action == TileSprite.POP:
+        if action == self.ZOOM_UPDATE:
+            is_complete = self._zoom_update(args)
+        elif action == self.POP:
             is_complete = self._pop_tile(args)
         elif action == self.MOVE:
             is_complete = self._move_tile(args)
+        elif action == self.KILL:
+            is_complete = self._fade_kill_tile(args)
         if is_complete:
             self.update_jobs.pop(0)
 
-    def _update_text(self, args):
-        text, = args
-        self.image.fill(NUM_TILE_COL)
-        text_surf = get_text_surf(text, self.h, self.w, TILE_FT_COL)
-        self.image.blit(text_surf, (self.w/3, self.h/4))
-        return True
+    def _gen_zoom_val(self):
+        value = 0
+        while value < PDNG * 1/3 :
+            value = value + 5
+            yield value
+        while value > 0:
+            value = value - 5
+            yield value
+
+    def _zoom_update(self, args):
+        num, = args
+        zoom_num = 0
+        zoom_complete = False
+        if not self.job_state:
+            self.job_state = self._gen_zoom_val()
+        try:
+            zoom_num = next(self.job_state)
+        except StopIteration:
+            zoom_complete = True
+            self.job_state = None
+        num_text = str(num)
+        self.image, self.rect = self._update_text(num_text,self.w + 2 * zoom_num,
+                        self.h + 2 * zoom_num,self.x - zoom_num, self.y - zoom_num,TILE_COL )
+        return zoom_complete
+
+    def _update_text(self, text, w, h, x, y, color):
+        image = pygame.Surface([w, h])
+        rect = image.get_rect()
+        draw_text_rect( text, image, 0, 0, h, w, TILE_FT_COL, color)
+        rect.x = x
+        rect.y = y
+        return image, rect
+
+    def _pop_tile(self, args):
+        topleft_corner,num= args
+        self.x, self.y = topleft_corner
+        pop_state = False
+        self.job_state = 30 if not self.job_state else  self.job_state - 5
+        self.image, self.rect = self._update_text(str(num),self.w - 2 * self.job_state,
+                                self.h - 2 * self.job_state,self.x + self.job_state,
+                                self.y + self.job_state, TILE_COL)
+        if self.job_state == 0:
+            pop_state = True
+            self.job_state = None
+        return pop_state
 
     def _get_move_delta(self, distance):
         abs_dist = abs(distance)
@@ -88,21 +135,17 @@ class TileSprite(pygame.sprite.DirtySprite):
         diff_x = topleft_corner[0] - self.rect.x
         diff_y = topleft_corner[1] - self.rect.y
         if not diff_x and not diff_y:
+            self.x ,self.y = topleft_corner
             return True
         delta = (self._get_move_delta(diff_x) if diff_x != 0 else 0,
                  self._get_move_delta(diff_y) if diff_y != 0 else 0)
         self.rect = self.rect.move(delta)
         return False
 
-    def _pop_tile(self, args):
-        topleft_corner, = args
+    def _fade_kill_tile(self,args):
         alpha = self.image.get_alpha()
-        if alpha == 255:
-            return True
-        self.rect.x, self.rect.y = topleft_corner
-        alpha = alpha + self.ALPHA_DELTA
-        self.image.set_alpha(alpha)
-        return False
+        pygame.sprite.Sprite.kill(self)
+        return True
 
 class View(object):
     """2048 ng Window"""
@@ -117,7 +160,7 @@ class View(object):
         self.allsprites = pygame.sprite.LayeredDirty()
         # Maintaining a collection of current tiles
         self.coord_tiles = {}
-        self.working_tiles = []
+        self.deleted_tiles = []
         self._draw_game()
 
     def _draw_game(self):
@@ -125,19 +168,19 @@ class View(object):
         db_w = (WIN_W - PDNG * 4)/3
 
 # Drawing the logo
-        self._draw_text_rect("2048", PDNG, PDNG, DB_H, db_w, FNT_COL, BRND_COL)
+        draw_text_rect("2048",self.background, PDNG, PDNG, DB_H, db_w, FNT_COL, BRND_COL)
 
 # Drawing the Score Board
         self.sc_d = (db_w + 2 * PDNG, PDNG, int(DB_H/2), db_w)
-        self._draw_text_rect("SCORE", self.sc_d[0], self.sc_d[1], self.sc_d[2],
+        draw_text_rect("SCORE", self.background, self.sc_d[0], self.sc_d[1], self.sc_d[2],
                              self.sc_d[3], FNT_COL, BRD_COL)
-        self.draw_score(0)
+        self.draw_score("0")
 
 # Drawing Max Score Board
         self.mx_d = (2 * db_w + 3 * PDNG, PDNG, int(DB_H/2), db_w)
-        self._draw_text_rect(" MAX ", self.mx_d[0], self.mx_d[1], self.mx_d[2],
+        draw_text_rect(" MAX ", self.background, self.mx_d[0], self.mx_d[1], self.mx_d[2],
                              self.mx_d[3], FNT_COL, BRD_COL)
-        self.draw_max_score(0)
+        self.draw_max_score("0")
 
 # Drawing Board
         self.brd_d = (PDNG, DB_H + 2 * PDNG, WIN_W - 2 * PDNG,WIN_H - 3 * PDNG - DB_H)
@@ -156,19 +199,15 @@ class View(object):
         self.screen.blit(self.background, (0, 0))
         pygame.display.flip()
 
-    def _draw_text_rect(self, text, x, y, h, w, font_clr, bg_clr):
-        pygame.draw.rect(self.background, bg_clr, (x, y, w, h), 0)
-        text_surf = get_text_surf(text, h, w, font_clr)
-        textpos = text_surf.get_rect(centerx=x + w/2, centery=y + h/2)
-        self.background.blit(text_surf, textpos)
-
     def draw_score(self, score):
-        self._draw_text_rect(str(score), self.sc_d[0], self.sc_d[1] + self.sc_d[2],
-                             self.sc_d[2], self.sc_d[3], FNT_COL, BRD_COL)
+        draw_text_rect(score, self.background, self.sc_d[0],
+                       self.sc_d[1] + self.sc_d[2], self.sc_d[2], self.sc_d[3],
+                       FNT_COL, BRD_COL)
 
     def draw_max_score(self, max_score):
-        self._draw_text_rect(str(max_score), self.mx_d[0], self.mx_d[1] + self.mx_d[2],
-                             self.mx_d[2], self.mx_d[3], FNT_COL, BRD_COL)
+        draw_text_rect(max_score, self.background, self.mx_d[0],
+                       self.mx_d[1] + self.mx_d[2],self.mx_d[2],
+                       self.mx_d[3], FNT_COL, BRD_COL)
 
     def set_controller(self, controller):
         self.controller = controller
@@ -189,25 +228,24 @@ class View(object):
             return (log_list[pos_name], axis_index) if axis == "y" else \
                    (axis_index, log_list[pos_name])
 
-    def notify(self, data):
-        axis, logs = data
-        print "Before Axis,logs", axis, logs
+    def notify(self,*args):
+        score,max_score,axis, logs = args
         for axis_index, log in logs.items():
             for action in log:
                 self._process_action(axis, axis_index, action)
+        self.draw_score(str(score))
+        self.draw_max_score(str(max_score))
 
     def _process_action(self, axis, axis_index, action):
         to_coord = self._get_tile_coord(axis, axis_index, action, "x")
         from_coord = self._get_tile_coord(axis, axis_index, action, "from_x")
         from_tile = self.coord_tiles[from_coord] if from_coord in self.coord_tiles else None
         to_tile = self.coord_tiles[to_coord] if to_coord in self.coord_tiles else None
-        val = str(action["val"])
-        print "Log,from_tile,to_tile,to_coord,from_coord",
+        val = str()
         action, from_tile, to_tile, to_coord, from_coord
         if action["state"] == ListOps.NEW:
             tile = TileSprite(self.t_w, self.t_h)
-            tile.add_jobs(TileSprite.UPDATE, val)
-            tile.add_jobs(TileSprite.POP, self._get_tile_pos(to_coord))
+            tile.add_jobs(TileSprite.POP, self._get_tile_pos(to_coord), action["val"])
             self.allsprites.add(tile)
             self.coord_tiles[to_coord] = tile
         elif action["state"] == ListOps.MOVE:
@@ -216,7 +254,12 @@ class View(object):
             self.coord_tiles[to_coord] = from_tile
         elif action["state"] == ListOps.ADD:
             from_tile.add_jobs(TileSprite.MOVE, self._get_tile_pos(to_coord))
-            to_tile.add_jobs(TileSprite.UPDATE,val)
+            from_tile.add_jobs(TileSprite.ZOOM_UPDATE,action["val"])
+            to_tile.add_jobs(TileSprite.KILL)
+            del self.coord_tiles[to_coord]
+            del self.coord_tiles[from_coord]
+            self.coord_tiles[to_coord] = from_tile
+
 
     def load_view(self):
         """ Starts the game loop """
@@ -225,6 +268,7 @@ class View(object):
         clock = pygame.time.Clock()
         self.allsprites.clear(self.screen, self.background)
         while run:
+#            print [self.coord_tiles[coord].has_jobs() for coord in self.coord_tiles]
                 # Display some text
             for event in pygame.event.get():
                 if any([self.coord_tiles[coord].has_jobs() for coord in self.coord_tiles]):
