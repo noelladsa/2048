@@ -10,8 +10,8 @@ TILE_COL = (238, 228, 218)
 BRND_COL = (255, 108, 120)
 BRD_COL = (187, 173, 160)
 TILE_FT_COL = (143, 122, 102)
-PDNG = 20
-DB_H = 100
+PDNG = 10
+DB_H = 150
 WIN_W = 600
 WIN_H = 700
 FSIZES = [6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 21, 24, 28, 32, 36, 42, 48, 55, 63, 73, 84, 96]
@@ -31,10 +31,27 @@ def get_text_surf(text, h, w, font_clr):
     return text_surf
 
 def draw_text_rect( text, surf, x, y, h, w, font_clr, bg_clr):
-    pygame.draw.rect(surf, bg_clr, (x, y, w, h), 0)
+    text_back = pygame.draw.rect(surf, bg_clr, (x, y, w, h), 0)
     text_surf = get_text_surf(text, h - PDNG, w - PDNG, font_clr)
     textpos = text_surf.get_rect(centerx=x + w/2, centery=y + h/2)
     surf.blit(text_surf, textpos)
+    return text_back
+
+class DashBoardSprite(pygame.sprite.DirtySprite):
+
+    def __init__(self, x, y, h, w):
+        pygame.sprite.DirtySprite.__init__(self)
+        self.image = pygame.Surface([w, h])
+        self.rect = self.image.get_rect()
+        self.w, self.h = w, h
+        self.rect.x, self.rect.y = x, y
+
+    def change_text(self,text):
+        draw_text_rect(text, self.image, 0, 0, self.h, self.w, TILE_COL, BRD_COL)
+        self.dirty = 1
+
+    def update(self):
+        self.dirty = 1
 
 
 class TileSprite(pygame.sprite.DirtySprite):
@@ -82,10 +99,10 @@ class TileSprite(pygame.sprite.DirtySprite):
     def _gen_zoom_val(self):
         value = 0
         while value < PDNG * 1/3 :
-            value = value + 5
+            value = value + 1
             yield value
         while value > 0:
-            value = value - 5
+            value = value - 1
             yield value
 
     def _zoom_update(self, args):
@@ -162,26 +179,32 @@ class View(object):
         self.coord_tiles = {}
         self.deleted_tiles = []
         self._draw_game()
+        self.error_sprite = None
 
     def _draw_game(self):
         pygame.display.set_caption('2048')
         db_w = (WIN_W - PDNG * 4)/3
 
 # Drawing the logo
-        draw_text_rect("2048",self.background, PDNG, PDNG, DB_H, db_w, FNT_COL, BRND_COL)
+        draw_text_rect("2048",self.background, PDNG, PDNG, DB_H, db_w, TILE_FT_COL, BRND_COL)
 
 # Drawing the Score Board
-        self.sc_d = (db_w + 2 * PDNG, PDNG, int(DB_H/2), db_w)
-        draw_text_rect("SCORE", self.background, self.sc_d[0], self.sc_d[1], self.sc_d[2],
-                             self.sc_d[3], FNT_COL, BRD_COL)
-        self.draw_score("0")
-
+        score_h = int(DB_H * 2/3)
+        draw_text_rect("SCORE", self.background, db_w + 2 * PDNG, PDNG, int(score_h/3),
+                       db_w,TILE_COL, BRD_COL)
+        self.score_sprite = DashBoardSprite(db_w + 2 * PDNG, PDNG + int(score_h/3),
+                            int(score_h * 2/3), db_w)
+        self.allsprites.add(self.score_sprite)
 # Drawing Max Score Board
-        self.mx_d = (2 * db_w + 3 * PDNG, PDNG, int(DB_H/2), db_w)
-        draw_text_rect(" MAX ", self.background, self.mx_d[0], self.mx_d[1], self.mx_d[2],
-                             self.mx_d[3], FNT_COL, BRD_COL)
-        self.draw_max_score("0")
+        draw_text_rect("MAX", self.background, 2 * db_w + 3 * PDNG, PDNG, int(score_h/3),
+                       db_w, TILE_COL, BRD_COL)
+        self.mx_score_sprite = DashBoardSprite(2 * db_w + 3 * PDNG, PDNG + int(score_h/3),
+                            int(score_h * 2/3), db_w)
+        self.allsprites.add(self.mx_score_sprite)
 
+        self.new_button = draw_text_rect("NEW GAME", self.background,
+                          db_w + 2 * PDNG, score_h + 2 * PDNG, DB_H/3 - PDNG,
+                          2 * db_w + PDNG, TILE_COL, BRD_COL)
 # Drawing Board
         self.brd_d = (PDNG, DB_H + 2 * PDNG, WIN_W - 2 * PDNG,WIN_H - 3 * PDNG - DB_H)
         pygame.draw.rect(self.background, BRD_COL, (self.brd_d[0], self.brd_d[1],
@@ -198,16 +221,6 @@ class View(object):
 
         self.screen.blit(self.background, (0, 0))
         pygame.display.flip()
-
-    def draw_score(self, score):
-        draw_text_rect(score, self.background, self.sc_d[0],
-                       self.sc_d[1] + self.sc_d[2], self.sc_d[2], self.sc_d[3],
-                       FNT_COL, BRD_COL)
-
-    def draw_max_score(self, max_score):
-        draw_text_rect(max_score, self.background, self.mx_d[0],
-                       self.mx_d[1] + self.mx_d[2],self.mx_d[2],
-                       self.mx_d[3], FNT_COL, BRD_COL)
 
     def set_controller(self, controller):
         self.controller = controller
@@ -233,8 +246,8 @@ class View(object):
         for axis_index, log in logs.items():
             for action in log:
                 self._process_action(axis, axis_index, action)
-        self.draw_score(str(score))
-        self.draw_max_score(str(max_score))
+        self.score_sprite.change_text(str(score))
+        self.mx_score_sprite.change_text(str(max_score))
 
     def _process_action(self, axis, axis_index, action):
         to_coord = self._get_tile_coord(axis, axis_index, action, "x")
@@ -260,6 +273,24 @@ class View(object):
             del self.coord_tiles[from_coord]
             self.coord_tiles[to_coord] = from_tile
 
+    def new_game(self):
+        if self.error_sprite:
+            print "Removing error"
+            self.allsprites.remove(self.error_sprite)
+            pygame.sprite.Sprite.kill(self.error_sprite)
+            self.error_sprite = None
+
+        for coord,sprite in self.coord_tiles.items():
+            pygame.sprite.Sprite.kill(sprite)
+            del self.coord_tiles[coord]
+
+        self.controller.start()
+
+    def show_message(self, message):
+        self.error_sprite = DashBoardSprite(PDNG, DB_H + 2 * PDNG, WIN_H - 3 * PDNG - DB_H,
+                                            WIN_W - 2 * PDNG)
+        self.error_sprite.change_text(message)
+        self.allsprites.add(self.error_sprite)
 
     def load_view(self):
         """ Starts the game loop """
@@ -267,31 +298,37 @@ class View(object):
         run = True
         clock = pygame.time.Clock()
         self.allsprites.clear(self.screen, self.background)
+        self.controller.start()
         while run:
-#            print [self.coord_tiles[coord].has_jobs() for coord in self.coord_tiles]
-                # Display some text
             for event in pygame.event.get():
                 if any([self.coord_tiles[coord].has_jobs() for coord in self.coord_tiles]):
                     break;
+                try:
+                    if event.type == KEYDOWN:
+                        key = pygame.key.get_pressed()
+                        if key[pygame.K_LEFT]:
+                            self.controller.handle_key_left()
+                        if key[pygame.K_RIGHT]:
+                            self.controller.handle_key_right()
+                        if key[pygame.K_UP]:
+                            self.controller.handle_key_up()
+                        if key[pygame.K_DOWN]:
+                            self.controller.handle_key_down()
 
-                if event.type == KEYDOWN:
-                    key = pygame.key.get_pressed()
-                    if key[pygame.K_LEFT]:
-                        self.controller.handle_key_left()
-                    if key[pygame.K_RIGHT]:
-                        self.controller.handle_key_right()
-                    if key[pygame.K_UP]:
-                        self.controller.handle_key_up()
-                    if key[pygame.K_DOWN]:
-                        self.controller.handle_key_down()
+                except Exception as e:
+                    self.show_message(e.strmessage)
 
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    pos = pygame.mouse.get_pos()
+                    if self.new_button.collidepoint(pos):
+                        self.new_game()
                 if event.type == pygame.QUIT:
                     run = False
 
             self.allsprites.update()
             rects = self.allsprites.draw(self.screen)
             pygame.display.update(rects)
-            clock.tick(60)
+            clock.tick(30)
 
         self.controller.handle_quit()
         pygame.quit()
