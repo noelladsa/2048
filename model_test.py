@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from Model import Model
+from model import Model
 
 
 def game_over(handler):
