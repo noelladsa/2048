@@ -1,3 +1,8 @@
 # 2048
-An initial version of 2048 in python.
-The front end is in pygame and is yet to be completed. Currently works on console from Run.py
+An implemention of 2048 in pygame using DirtySprites
+
+#Installation
+Pre-requisites install pygame 
+
+#Run
+python controller.py
