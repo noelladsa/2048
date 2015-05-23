@@ -6,8 +6,8 @@ def collapse_list(num_list, transform):
     """List can contain numbers interspersed with empty positions.
     List will shrink such that first occuring pairs
     are added and the rest occupy spots that have 0"""
-    pos = 0 											# Starting from_pos the left extreme of the board
-    pair_pos = None 									# Stores an x of the start of a pair
+    pos = 0 	                                         # Stores an x of the start of a pair
+    pair_pos = None
     ops_log = []
     while pos < len(num_list):
         filled_pos = _find_next_number(pos, num_list)
@@ -15,13 +15,13 @@ def collapse_list(num_list, transform):
             break
 
         op_log = None
-        if pair_pos is not None: 						# A pair was already started
+        if pair_pos is not None: 			# A pair was already started
             op_log = _pair_addition(pair_pos, filled_pos, num_list, transform)
             pair_pos = None
 
         if not op_log:
             op_log = _move_number(pos, filled_pos, num_list, transform)
-            pair_pos = pos   						# Start a new pair for future additions
+            pair_pos = pos   			    # Start a new pair for future additions
             pos = pos + 1
 
         if op_log:
@@ -39,23 +39,23 @@ def _find_next_number(pos, num_list):
     return pos if pos < len(num_list) else None
 
 
-def _pair_addition(to_pos, from_pos, num_list, transform):
+def _pair_addition(to_x, from_x, num_list, transform):
     """Check if two elements are equal and add to one if so"""
-    if num_list[to_pos] == num_list[from_pos]:
-        num_list[to_pos] = 2 * num_list[from_pos]
-        num_list[from_pos] = 0
-        return {'State': ADD, 'from_pos': abs(transform - from_pos),
-                'to_pos': abs(transform - to_pos), 'to_val': num_list[to_pos]}
+    if num_list[to_x] == num_list[from_x]:
+        num_list[to_x] = 2 * num_list[from_x]
+        num_list[from_x] = 0
+        return {'state': ADD, 'from_x': abs(transform - from_x),
+                'x': abs(transform - to_x), 'val': num_list[to_x]}
 
 
-def _move_number(to_pos, from_pos, num_list, transform):
+def _move_number(to_x, from_x, num_list, transform):
     """ Moving numbers from one position to another,
     changing previous position to None"""
-    if to_pos != from_pos:
-        num_list[to_pos] = num_list[from_pos]
-        num_list[from_pos] = 0
-        return {'State': MOVE, 'from_pos':abs(transform - from_pos),
-                'to_pos': abs(transform - to_pos), 'to_val': num_list[to_pos]}
+    if to_x != from_x:
+        num_list[to_x] = num_list[from_x]
+        num_list[from_x] = 0
+        return {'state': MOVE, 'from_x':abs(transform - from_x),
+                'x': abs(transform - to_x), 'val': num_list[to_x]}
 
 
 def is_pair_present(num_list):
