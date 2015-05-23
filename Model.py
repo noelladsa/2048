@@ -35,9 +35,9 @@ class Model(object):
     def remove_listener(self, listener):
         self.listeners.remove(listener)
 
-    def send_notification(self, notification):
+    def send_notification(self,axis,logs):
         for listener in self.listeners:
-            listener.notify(notification)
+            listener.notify(self.score,self.max_score,axis,logs)
 
     def get_score(self):
         return self.score
@@ -58,8 +58,10 @@ class Model(object):
                 continue
             elif self.grid[x][y] == 0:
                 self.grid[x][y] = random.choice([2, 4])
-                self.send_notification({'State': ListOps.NEW, 'to_x': x,
-                                        "to_y": y, "val": self.grid[x][y]})
+                data = [{'state': ListOps.NEW, 'x': x,"val": self.grid[x][y]}]
+                axes = "x"
+                log = {y:data}
+                self.send_notification(axes,log)
                 return True
             else:
                 occupied_tiles.add((x, y))
@@ -78,32 +80,34 @@ class Model(object):
     def _process_results(self, logs, axis):
         if all(not log for log in logs):
             return
-
-        self._add_number()
-        for log in logs:
+        log_dict = {}
+        for index,log in enumerate(logs):
             for entry in log:
-                if entry["State"] == ListOps.ADD:
-                    self.score = self.score + entry["to_val"]
-        return axis, logs
+                if entry["state"] == ListOps.ADD:
+                    self.score = self.score + entry["val"]
+            if log:
+                log_dict[index] = log
+        self.send_notification(axis,log_dict)
+        self._add_number()
 
     def move_left(self):
         """ Moving numbers to the left extreme of the board """
-        return self._process_results([ListOps.collapse_list(self.grid[y, :], 0)
+        self._process_results([ListOps.collapse_list(self.grid[y, :], 0)
                                       for y in range(self.size)], "y")
 
     def move_right(self):
         """ Moving numbers to the right extreme of the board """
-        return self._process_results([ListOps.collapse_list(self.grid[y, ::-1], self.size)
+        self._process_results([ListOps.collapse_list(self.grid[y, ::-1], self.size - 1)
                                       for y in range(self.size)], "y")
 
     def move_up(self):
         """ Moving numbers to the top extreme of the board """
-        return self._process_results([ListOps.collapse_list(self.grid[:, x], 0)
+        self._process_results([ListOps.collapse_list(self.grid[:, x], 0)
                                       for x in range(self.size)], "x")
 
     def move_down(self):
         """ Moving numbers to the bottom extreme of the board """
-        return self._process_results([ListOps.collapse_list(self.grid[::-1, x], self.size)
+        self._process_results([ListOps.collapse_list(self.grid[::-1, x], self.size - 1)
                                       for x in range(self.size)], "x")
 
     def _has_empty_spaces(self):
