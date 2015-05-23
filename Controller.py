@@ -10,10 +10,10 @@ class Controller(object):
         self.view = View()
         self.view.set_controller(self)
         self.handler.register_listener(self.view)
+        self.view.load_view()
 
     def start(self):
         self.handler.start_game()
-        self.view.load_view()
 
     def handle_key_left(self):
         self.handler.move_left()
@@ -27,9 +27,4 @@ class Controller(object):
     def handle_key_down(self):
         self.handler.move_down()
 
-    def handle_quit():
-        pass
-
-
 controller = Controller()
-controller.start()
