@@ -6,7 +6,7 @@ Install <a href="pygame.org>pygame</a>
 
 #Installation
 Clone repository using the command below
-git clone https://github.com/noelladsa/2048
+"git clone https://github.com/noelladsa/2048"
 
 #Run
 python controller.py
