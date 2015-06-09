@@ -6,8 +6,7 @@ Clone repository with
 `git clone https://github.com/noelladsa/2048`
 
 #Pre-requsites
-pygame from http://www.pygame.org/download.shtml
-numpy
+pygame from http://www.pygame.org/download.shtml, numpy
 
 #Run
 python controller.py
